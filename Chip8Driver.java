@@ -5,7 +5,7 @@ public class Chip8Driver {
         Chip8 chip8 = new Chip8();
         try {
             chip8.loadROM(new File("demo.ch8"));
-            // chip8.printHex();
+            chip8.debugHex("rom");
         } catch (Exception e) {
             e.printStackTrace();
         }

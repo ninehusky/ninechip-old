@@ -116,14 +116,24 @@ public class Chip8 {
      * Outputs memory data to output.txt
      * @throws Exception if output.txt not existent
      */
-    public void printHex() throws Exception {
+    public void debugHex(String type) throws Exception {
         PrintStream output = new PrintStream(new File("output.txt"));
         int realIndex = 0;
-        for (int i = FONT_START_ADDRESS; i < FONT_START_ADDRESS + FONT_SET_SIZE; i++) {
-            output.print(String.format("%02x", memory[i]) + " ");
-            realIndex++;
-            if (realIndex % 5 == 0) {
-                output.println();
+        if (type.equals("fonts")) {
+            for (int i = FONT_START_ADDRESS; i < FONT_START_ADDRESS + FONT_SET_SIZE; i++) {
+                output.print(String.format("%02x", memory[i]) + " ");
+                realIndex++;
+                if (realIndex % 5 == 0) {
+                    output.println();
+                }
+            }
+        } else if (type.equals("rom")) {
+            for (int i = START_ADDRESS; i < START_ADDRESS + 353; i++) { // 353 bytes size of game
+                output.print(String.format("%02x", memory[i]) + " ");
+                realIndex++;
+                if (realIndex % 16 == 0) {
+                    output.println();
+                }
             }
         }
     }
