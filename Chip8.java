@@ -1,7 +1,26 @@
 import java.io.*;
 import java.util.*;
+import javax.swing.*;
 
 public class Chip8 {
+    /** VIDEO RELATED FIELDS **/
+    private JFrame frame;
+    private static int WIDTH;
+    private static int HEIGHT;
+
+    /** CPU RELATED FIELDS **/
+    private byte[] registers;
+    private byte[] memory; // not sure if byte
+    private char indexRegister;
+    private char programCounter;
+    private char[] stack;
+    private byte stackPointer;
+    private byte delayTimer;
+    private byte soundTimer;
+    private int[] video;
+    private int opcode;
+
+    /** FONT RELATED FIELDS */
     private final char[] FONT_SET = {
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -22,34 +41,30 @@ public class Chip8 {
     };
 
     private final int FONT_SET_SIZE = 80;
-
     private final int START_ADDRESS = 0x200;
     private final int FONT_START_ADDRESS = 0x50;
-    
-
-
-    private byte[] registers;
-    private byte[] memory; // not sure if byte
-    private char indexRegister;
-    private char programCounter;
-    private char[] stack;
-    private byte stackPointer;
-    private byte delayTimer;
-    private byte soundTimer;
-    private int[] video;
-    private int opcode;
 
     /**
      * Creates new Chip8.
      */
     public Chip8() {
+        WIDTH = 32;
+        HEIGHT = 64;
+
+        // FONT_SET_SIZE = 80;
+        // START_ADDRESS = 0x200;
+        // FONT_START_ADDRESS = 0x50;
+
         registers = new byte[16];
         memory = new byte[4096];
         stack = new char[16];
         video = new int[64 * 32]; // consts
         programCounter = START_ADDRESS;
 
+        frame = new JFrame("ninechip!");
+
         loadFontSet();
+        setupFrame();
     }
 
     /**
@@ -72,6 +87,10 @@ public class Chip8 {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void setupFrame() {
+        frame.setVisible(true);
     }
 
     /**
