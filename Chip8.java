@@ -14,14 +14,17 @@ public class Chip8 {
     private char opcode;
 
     private Memory memory;
+    private Display display;
     private Keypad keypad;
 
     public Chip8() {
         memory = new Memory();
+        display = new Display();
         keypad = new Keypad();
         programCounter = Memory.START_ADDRESS;
         opcode = 0;
         // Clear display
+        display.initialize();
         // Clear stack
         stack = new char[16];
         // Clear registers
@@ -31,7 +34,13 @@ public class Chip8 {
     }
 
     public void cycle() {
+        try {
+            Thread.sleep(500);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         opcode = memory.fetchOpcode(programCounter);
+        System.out.println(String.format("current opcode: %04x", (int)opcode));
         decodeOpcode(opcode);
         // TODO: increment programCounter here
         if (delayRegister > 0) {
@@ -61,7 +70,7 @@ public class Chip8 {
                         programCounter = stack[stackPointer--];
                         break;
                     default:
-                        System.out.println(String.format("Invalid opcode %04x", opcode));
+                        System.out.printf("Invalid opcode " + String.format("%04x", (int)opcode));
                         break;
                 }
                 break;
@@ -237,6 +246,30 @@ public class Chip8 {
                 break;
             case 0xD000:
                 // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+                x = (byte)((opcode & 0x0F00) >> 8);
+                y = (byte)((opcode & 0x00F0) >> 4);
+                byte n = (byte)(opcode & 0x000F);
+                int xPos = registers[x] % Display.WIDTH;
+                int yPos = registers[y] % Display.HEIGHT;
+
+                registers[0xF] = 0;
+
+                for (int row = 0; row < n; row++) {
+                    byte spriteByte = (byte)(memory.read((char)(indexRegister + row)));
+                    for (int col = 0; col < 8; col++) {
+                        // reading each bit of the sprite?
+                        byte spritePixel = (byte)(spriteByte & (0x80 >> col));
+                        byte screenPixel = display.getGraphics()[(yPos + row) * Display.WIDTH + (xPos + col)];
+                        if (spritePixel == 1) { // if it's on
+                            if (screenPixel != 0) {
+                                registers[0xF] = 1;
+                            }
+                        }
+                        byte value = (byte)(spritePixel ^ screenPixel);
+                        display.setGraphics((yPos + row) * Display.WIDTH + (xPos + col), value);
+                    }
+                    programCounter += 2;
+                }
                 break;
             case 0xE000:
                 switch (opcode & 0x000F) {
@@ -340,7 +373,7 @@ public class Chip8 {
                 }
 
             default:
-                System.out.println(String.format("Invalid opcode %04x", opcode));
+                System.out.println(String.format("Invalid opcode %04x", (int)opcode));
                 programCounter += 2;
                 break;
         }

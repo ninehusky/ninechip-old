@@ -25,12 +25,14 @@ public class Memory {
         0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
-
-    private byte[] memory;
+    // TODO: make this private
+    public byte[] memory;
 
     public Memory() {
         memory = new byte[MEM_SIZE_IN_BYTES];
+        loadROM(new File("demo.ch8"));
         loadFontSet();
+        System.out.println("memory loaded!");
     }
 
     /**
@@ -65,6 +67,9 @@ public class Memory {
      * @return char - opcode
      */
     public char fetchOpcode(char programCounter) {
+        // System.out.println(String.format("first: %02x", (byte)memory[programCounter]));
+        // System.out.println(String.format("second: %02x", (byte)memory[programCounter + 1]));
+        // System.out.println(String.format("%04x", (int)((char)(memory[programCounter] << 8 | memory[programCounter + 1]))));
         return (char)(memory[programCounter] << 8 | memory[programCounter + 1]);
     }
 
@@ -115,6 +120,7 @@ public class Memory {
                     output.println();
                 }
             }
+            output.close();
         } catch (Exception e) {
             e.printStackTrace();
         }

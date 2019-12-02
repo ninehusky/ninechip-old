@@ -6,6 +6,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "CodeLens (Launch) - Chip8Driver",
+            "request": "launch",
+            "mainClass": "Chip8Driver",
+            "projectName": "ninechip_8e27768d"
+        },
+        {
+            "type": "java",
             "name": "Debug (Launch) - Current File",
             "request": "launch",
             "mainClass": "${file}"
