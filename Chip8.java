@@ -1,397 +1,387 @@
-import java.io.*;
 import java.util.*;
-import javax.swing.*;
 
 public class Chip8 {
-    /** VIDEO RELATED FIELDS **/
-    private JFrame frame;
-    private static int WIDTH;
-    private static int HEIGHT;
-    private static int PIXEL_SIZE;
 
-    /** CPU RELATED FIELDS **/
     private byte[] registers;
-    private byte[] memory; // not sure if byte
     private char indexRegister;
-    private char programCounter;
+    private byte soundRegister;
+    private byte delayRegister;
+
     private char[] stack;
-    private char stackPointer;
-    private byte delayTimer;
-    private byte soundTimer;
-    private int[] video;
+    private byte stackPointer;
+    private char programCounter;
+
     private char opcode;
 
-    /** FONT RELATED FIELDS */
-    private final char[] FONT_SET = {
-        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-        0x20, 0x60, 0x20, 0x20, 0x70, // 1
-        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
-    };
+    private Memory memory;
+    private Display display;
+    private Keypad keypad;
 
-    private final int FONT_SET_SIZE;
-    private final char START_ADDRESS;
-    private final char FONT_START_ADDRESS;
-
-    /**
-     * Creates new Chip8.
-     */
     public Chip8() {
-        WIDTH = 64;
-        HEIGHT = 32;
-        PIXEL_SIZE = 10;
-
-        FONT_SET_SIZE = 80;
-        START_ADDRESS = 0x200;
-        FONT_START_ADDRESS = 0x50;
-
-        registers = new byte[16];
-        memory = new byte[4096];
+        memory = new Memory();
+        display = new Display();
+        keypad = new Keypad();
+        programCounter = Memory.START_ADDRESS;
+        opcode = 0;
+        // Clear display
+        display.initialize();
+        // Clear stack
         stack = new char[16];
-        video = new int[64 * 32]; // consts
-        programCounter = START_ADDRESS;
-
-        frame = new JFrame();
-
-        loadFontSet();
-        setupFrame();
+        // Clear registers
+        registers = new byte[16];
+        indexRegister = 0;
+        stackPointer = 0;
     }
 
-    /**
-     * Loads the data from the given ROMFile into memory.
-     * @param ROMFile - File that contains game data
-     * @throws IllegalArgumentException - if file size too large for memory
-     */
-    public void loadROM(File ROMFile) {
-        long length = ROMFile.length();
-        if (length > 4096) {
-            throw new IllegalArgumentException("File size too large for memory!");
-        }
+    public void cycle() {
         try {
-            InputStream inputStream = new FileInputStream(ROMFile);
-            byte[] buffer = inputStream.readAllBytes();
-            inputStream.close();
-            for (int i = 0; i < buffer.length; i++) {
-                memory[START_ADDRESS + i] = buffer[i];
-            }
-        } catch (IOException e) {
+            Thread.sleep(500);
+        } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private void setupFrame() {
-        frame.setVisible(true);
-        frame.setTitle("ninechip!");
-        frame.setSize(WIDTH * PIXEL_SIZE, HEIGHT * PIXEL_SIZE);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setResizable(false);
-    }
-
-    /**
-     * Loads font set into memory.
-     */
-    private void loadFontSet() {
-        for (int i = 0; i < FONT_SET_SIZE; i++) {
-            memory[FONT_START_ADDRESS + i] = (byte)FONT_SET[i];
+        opcode = memory.fetchOpcode(programCounter);
+        System.out.println(String.format("current opcode: %04x", (int)opcode));
+        decodeOpcode(opcode);
+        // TODO: increment programCounter here
+        if (delayRegister > 0) {
+            delayRegister--;
         }
-        System.out.println("Fonts loaded!");
+        if (soundRegister > 0) {
+            if (soundRegister >= 0x02) {
+                System.out.println("boop");
+            }
+            soundRegister--;
+        }
     }
 
     /**
-     * Returns random byte between 0 and 255 inclusive.
-     * @return random byte between 0 and 255 inclusive
+     * WARNING: This is a real mess.
+     * Decodes the given opcode and updates CPU information.
+     * @param opcode - opcode to perform.
      */
+    public void decodeOpcode(char opcode) {
+        switch (opcode & 0xF000) { // opcode begins with something
+            case 0x0000:
+                switch(opcode) {
+                    case 0x00E0:
+                        // TODO: clear screen
+                        break;
+                    case 0x00EE:
+                        programCounter = stack[stackPointer--];
+                        break;
+                    default:
+                        System.out.printf("Invalid opcode " + String.format("%04x", (int)opcode));
+                        break;
+                }
+                break;
+            case 0x1000:
+                // 1nnn - sets program counter to nnn
+                programCounter = (char)(opcode & 0x0FFF);
+                break;
+            case 0x2000:
+                // 2nnn - increments the stack pointer,
+                // then puts the current PC on the top of the stack.
+                // The PC is then set to nnn.
+                stackPointer++;
+                stack[stackPointer] = programCounter;
+                programCounter = (char)(opcode & 0x0FFF);
+                break;
+            case 0x3000:
+                // Skip next instruction if Vx = kk.
+                byte x = (byte)((opcode & 0x0F00) >> 8);
+                byte Vx = registers[x];
+                byte kk = (byte)(opcode & 0x00FF);
+                if (Vx == kk) {
+                    programCounter += 2;
+                }
+                break;
+            case 0x4000:
+                // Skip next instruction if Vx != kk.
+                x = (byte)((opcode & 0x0F00) >> 8);
+                Vx = registers[x];
+                kk = (byte)(opcode & 0x00FF);
+                if (Vx != kk) {
+                    programCounter += 2;
+                }
+                programCounter += 2; // i think i still need this
+                break;
+            case 0x5000:
+                // Skip next instruction if Vx = Vy.
+                x = (byte)((opcode & 0x0F00) >> 8);
+                byte y = (byte)((opcode & 0x00F0) >> 4);
+                if (registers[x] == registers[y]) {
+                    programCounter += 2;
+                }
+                programCounter += 2;
+                break;
+            case 0x6000:
+                // The interpreter puts the value kk into register Vx.
+                kk = (byte)(opcode & 0x00FF);
+                x = (byte)((opcode & 0x0F00) >> 8);
+                registers[x] = kk;
+                programCounter += 2;
+                break;
+            case 0x7000:
+                // Set Vx = Vx + kk.
+                kk = (byte)(opcode & 0x00FF);
+                x = (byte)((opcode & 0x0F00) >> 8);
+                registers[x] += kk;
+                programCounter += 2;
+                break;
+            case 0x8000:
+                x = (byte)((opcode & 0x0F00) >> 8);
+                y = (byte)((opcode & 0x00F0) >> 4);
+                switch (opcode & 0x000F) {
+                    case 0x0000:
+                        // Stores the value of register Vy in register Vx.
+                        registers[x] = registers[y];
+                        programCounter += 2;
+                        break;
+                    case 0x0001:
+                        // Set Vx = Vx OR Vy.
+                        registers[x] |= registers[y];
+                        programCounter += 2;
+                        break;
+                    case 0x0002:
+                        // Set Vx = Vx AND Vy.
+                        registers[x] &= registers[y];
+                        programCounter += 2;
+                        break;
+                    case 0x0003:
+                        // Set Vx = Vx XOR Vy.
+                        registers[x] ^= registers[y];
+                        programCounter += 2;
+                        break;
+                    case 0x0004:
+                        // Set Vx = Vx + Vy, set VF = carry.
+                        if (registers[x] + registers[y] > 255) {
+                            registers[0xF] = 1;
+                        } else {
+                            registers[0xF] = 0;
+                        }
+                        registers[x] = (byte)((registers[x] + registers[y]) & 0x00FF);
+                        programCounter += 2;
+                        break;
+                    case 0x0005:
+                        // If Vx > Vy, then VF is set to 1, otherwise 0.
+                        // Then Vy is subtracted from Vx, and the results stored in Vx.
+                        if (registers[x] > registers[y]) {
+                            registers[0xF] = 1;
+                        } else {
+                            registers[0xF] = 0;
+                        }
+                        registers[x] -= registers[y];
+                        programCounter += 2;
+                        break;
+                    case 0x0006:
+                        // Set Vx = Vx SHR 1.
+                        // If the least-significant bit of Vx is 1, then VF is set to 1,
+                        // otherwise 0. Then Vx is divided by 2.
+                        if ((registers[x] & 0x0F) == 1) {
+                            registers[0xF] = 1;
+                        } else {
+                            registers[0xF] = 0;
+                        }
+                        registers[x] /= 2;
+                        programCounter += 2;
+                        break;
+                    case 0x0007:
+                        // Set Vx = Vy - Vx, set VF = NOT borrow.
+                        // If Vy > Vx, then VF is set to 1, otherwise 0.
+                        // Then Vx is subtracted from Vy, and the results stored in Vx.
+                        if (registers[y] > registers[x]) {
+                            registers[0xF] = 1;
+                        } else {
+                            registers[0xF] = 0;
+                        }
+                        registers[x] = (byte)(registers[y] - registers[x]);
+                        programCounter += 2;
+                        break;
+                    case 0x000E:
+                        // If the most-significant bit of Vx is 1, then VF is set to 1
+                        // otherwise to 0. Then Vx is multiplied by 2.
+                        byte MSB = (byte)((registers[x] & 0xF0) >> 7);
+                        if (MSB == 1) {
+                            registers[0xF] = 1;
+                        } else {
+                            registers[0xF] = 0;
+                        }
+                        registers[x] *= 2;
+                        programCounter += 2;
+                        break;
+                    default:
+                        System.out.println(String.format("Invalid opcode %04x", opcode));
+                        break;
+                }
+            case 0x9000:
+                // Skip next instruction if Vx != Vy.
+                // The values of Vx and Vy are compared, and if they are not equal,
+                // the program counter is increased by 2.
+                x = (byte)((opcode & 0x0F00) >> 8);
+                y = (byte)((opcode & 0x00F0) >> 4);
+                if (registers[x] != registers[y]) {
+                    programCounter += 2;
+                }
+                programCounter += 2;
+                break;
+            case 0xA000:
+                // The value of register I is set to nnn.
+                indexRegister = (char)(opcode & 0x0FFF);
+                programCounter += 2;
+                break;
+            case 0xB000:
+                // Jump to location nnn + V0.
+                // The program counter is set to nnn plus the value of V0.
+                programCounter = (char)((opcode & 0x0FFF) + registers[0]);
+                programCounter += 2;
+                break;
+            case 0xC000:
+                // Set Vx = random byte AND kk.
+                // TODO: see if x has any funky behavior
+                byte randByte = generateRandomByte();
+                kk = (byte)(opcode & 0x00FF);
+                x = (byte)((opcode & 0x0F00) >> 8);
+                registers[x] = (byte)(randByte & kk);
+                programCounter += 2;
+                break;
+            case 0xD000:
+                // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
+                x = (byte)((opcode & 0x0F00) >> 8);
+                y = (byte)((opcode & 0x00F0) >> 4);
+                byte n = (byte)(opcode & 0x000F);
+                int xPos = registers[x] % Display.WIDTH;
+                int yPos = registers[y] % Display.HEIGHT;
+
+                registers[0xF] = 0;
+
+                for (int row = 0; row < n; row++) {
+                    byte spriteByte = (byte)(memory.read((char)(indexRegister + row)));
+                    for (int col = 0; col < 8; col++) {
+                        // reading each bit of the sprite?
+                        byte spritePixel = (byte)(spriteByte & (0x80 >> col));
+                        byte screenPixel = display.getGraphics()[(yPos + row) * Display.WIDTH + (xPos + col)];
+                        if (spritePixel == 1) { // if it's on
+                            if (screenPixel != 0) {
+                                registers[0xF] = 1;
+                            }
+                        }
+                        byte value = (byte)(spritePixel ^ screenPixel);
+                        display.setGraphics((yPos + row) * Display.WIDTH + (xPos + col), value);
+                    }
+                    programCounter += 2;
+                }
+                break;
+            case 0xE000:
+                switch (opcode & 0x000F) {
+                    case 0x000E:
+                        x = (byte)((opcode & 0x0F00) >> 8);
+                        // Checks the keyboard,
+                        // and if the key corresponding to the value of Vx is currently in the down
+                        // position, PC is increased by 2.
+                        if (keypad.getPressed()[registers[x]]) {
+                            programCounter += 2;
+                        }
+                        break;
+                    case 0x0001:
+                        // Skip next instruction if key with the value of Vx is not pressed.
+                        // Checks the keyboard, and if the key corresponding to the value of Vx
+                        // is currently in the up position, PC is increased by 2.
+                        x = (byte)((opcode & 0x0F00) >> 8);
+                        if (!keypad.getPressed()[registers[x]]) {
+                            programCounter += 2;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case 0xF000:
+                x = (byte)((opcode & 0x0F00) >> 8);
+                switch (opcode & 0x00FF) {
+                    case 0x0007:
+                        // The value of DT is placed into Vx.
+                        registers[x] = delayRegister;
+                        programCounter += 2;
+                        break;
+                    case 0x000A:
+                        // All execution stops until a key is pressed,
+                        // then the value of that key is stored in Vx.
+                        boolean[] pressedKeys = keypad.getPressed();
+                        boolean hasPressed = false;
+                        for (int i = 0; i < pressedKeys.length; i++) {
+                            if (pressedKeys[i]) {
+                                registers[x] = (byte)i;
+                                hasPressed = true;
+                                break;
+                            }
+                        }
+                        if (!hasPressed) {
+                            programCounter -= 2;
+                        }
+                        break;
+                    case 0x0015:
+                        // Set delay timer = Vx.
+                        delayRegister = registers[x];
+                        programCounter += 2;
+                        break;
+                    case 0x0018:
+                        // Set sound timer = Vx.
+                        soundRegister = registers[x];
+                        programCounter += 2;
+                        break;
+                    case 0x001E:
+                        // Set I = I + Vx;
+                        indexRegister += registers[x];
+                        programCounter += 2;
+                        break;
+                    case 0x0029:
+                        // The value of I is set to the location for the hexadecimal sprite
+                        // corresponding to the value of Vx.
+                        // this particular solution inspired by austin
+                        indexRegister = (char)(Memory.FONT_START_ADDRESS + (5 * registers[x]));
+                        break;
+                    case 0x0033:
+                        // Store BCD representation of Vx in memory locations I, I+1, and I+2.
+                        // The interpreter takes the decimal value of Vx,
+                        // and places the hundreds digit in memory at location in I,
+                        // the tens digit at location I+1, and the ones digit at location I+2.
+                        int value = registers[x];
+                        memory.write(indexRegister, (byte)(value % 10));
+                        value /= 10;
+                        memory.write((char)(indexRegister + 1), (byte)(value % 10));
+                        value /= 10;
+                        memory.write((char)(indexRegister + 2), (byte)(value % 10));
+                        break;
+                    case 0x0055:
+                        // Store registers V0 through Vx in memory starting at location I.
+                        // The interpreter copies the values of registers V0 through Vx into memory,
+                        // starting at the address in I.
+                        for (int i = 0; i <= x; i++) {
+                            memory.write((char)(indexRegister + i), registers[i]);
+                        }
+                        programCounter += 2;
+                        break;
+                    case 0x0065:
+                        // Read registers V0 through Vx from memory starting at location I.
+                        // The interpreter reads values from memory starting at location I
+                        // into registers V0 through Vx.
+                        for (int i = 0; i <= x; i++) {
+                            registers[i] = memory.read((char)(indexRegister + i));
+                        }
+                        programCounter += 2;
+                        break;
+                }
+
+            default:
+                System.out.println(String.format("Invalid opcode %04x", (int)opcode));
+                programCounter += 2;
+                break;
+        }
+    }
+
     private byte generateRandomByte() {
         Random r = new Random();
-        return (byte)r.nextInt(256);
+        int randomNum = r.nextInt(256);
+        return (byte)randomNum;
     }
-
-    /**
-     * Outputs memory data to output.txt
-     * (I know this is ridiculously redundant)
-     * @throws Exception if output.txt not existent
-     */
-    public void debugHex(String type) throws Exception {
-        PrintStream output = new PrintStream(new File("output.txt"));
-        int realIndex = 0;
-        if (type.equals("fonts")) {
-            for (int i = FONT_START_ADDRESS; i < FONT_START_ADDRESS + FONT_SET_SIZE; i++) {
-                output.print(String.format("%02x", memory[i]) + " ");
-                realIndex++;
-                if (realIndex % 5 == 0) {
-                    output.println();
-                }
-            }
-        } else if (type.equals("rom")) {
-            for (int i = START_ADDRESS; i < START_ADDRESS + 353; i++) { // 353 bytes size of game
-                output.print(String.format("%02x", memory[i]) + " ");
-                realIndex++;
-                if (realIndex % 16 == 0) {
-                    output.println();
-                }
-            }
-        }
-    }
-
-    /** OPCODES */
-    /**
-     * CLS
-     * Clears screen.
-     */
-    private void opcode00E0() {
-        for (int i = 0; i < video.length; i++) {
-            video[i] = 0;
-        }
-    }
-
-    /**
-     * RET
-     * Return from a subroutine.
-     * The interpreter sets the program counter to the address at
-     * the top of the stack, then subtracts 1 from the stack pointer.
-     */
-    private void opcode00EE() {
-        stackPointer--;
-        programCounter = stackPointer;
-    }
-
-    /**
-     * JP addr
-     * Jump to location nnn.
-     */
-    private void opcode1nnn() {
-        char address = (char)(opcode & 0x0FFF);
-        programCounter = address;
-    }
-
-    /**
-     * CALL addr
-     * The interpreter increments the stack pointer,
-     * then puts the current PC on the top of the stack.
-     * The PC is then set to nnn.
-     */
-    private void opcode2nnn() {
-        stackPointer++;
-        stack[stackPointer] = programCounter;
-        int address = programCounter & 0x0FFF;
-        programCounter = (char)address;
-    }
-
-    /**
-     * SE Vx, byte
-     * Skip next instruction if Vx = kk
-     * The interpreter compares register Vx to kk, and if they are equal,
-     * increments the program counter by 2.
-     */
-    private void opcode3xkk() {
-        char x = (char)((programCounter & 0x0F00) >> 8);
-        char kk = (char)(programCounter & 0x00FF);
-        if (registers[x] == kk) {
-            programCounter += 2;
-            // skip two bytes, each opcode is 2 bytes so we're skipping one instruction
-        }
-    }
-
-    /**
-     * SNE Vx, byte
-     * Skip next instruction if Vx != kk
-     * The interpreter compares register Vx to kk, if not equal
-     * increments program counter by 2.
-     */
-    private void opcode4xkk() {
-        char x = (char)((opcode & 0x0F00) >> 8);
-        char kk = (char)(opcode & 0x00FF);
-        if (registers[x] != kk) {
-            programCounter += 2;
-        }
-    }
-
-    /**
-     * SE Vx, Vy
-     * Skip next instruction if Vx = Vy.
-     * Interpreter compares register Vx to register Vy, if they
-     * are equal increments program counter by 2.
-     */
-    private void opcode5xy0() {
-        char x = (char)((opcode & 0x0F00) >> 8);
-        char y = (char)((opcode & 0x00F0) >> 4);
-        if (registers[x] == registers[y]) {
-            programCounter += 2;
-        }
-    }
-
-    /**
-     * LD Vx, byte
-     * Set Vx = kk.
-     * The interpreter puts the value kk into register Vx.
-     */
-    private void opcode6xkk() {
-        byte kk = (byte)(programCounter & 0x00FF);
-        char x = (char)((programCounter & 0x0F00) >> 8);
-        // TODO: i don't think I need to use a char, since 0 <= x <= 16
-        registers[x] = kk;
-    }
-
-    /**
-     * ADD Vx, byte
-     * Set Vx = Vx + kk.
-     * Adds the value kk to the value of register Vx,
-     * then stores the result in Vx.
-     */
-    private void opcode7xkk() {
-        byte kk = (byte)(opcode & 0x00FF);
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        registers[x] += kk;
-    }
-
-    /**
-     * LD Vx, Vy
-     * Set Vx = Vy
-     * Stores the value of register Vy into register Vx.
-     */
-    private void opcode8xy0() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        registers[x] = registers[y];
-    }
-
-    /**
-     * OR Vx, Vy
-     * Set Vx = Vx OR Vy
-     * Performs a bitwise OR on the values of Vx and Vy, then stores
-     * the result in Vx.
-     */
-    private void opcode8xy1() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        registers[x] |= registers[y];
-    }
-
-    /**
-     * AND Vx, Vy
-     * Set Vx = Vx AND Vy
-     */
-    private void opcode8xy2() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        registers[x] &= registers[y];
-    }
-
-    /**
-     * XOR Vx, Vy
-     * Set Vx = Vx XOR Vy
-     */
-    private void opcode8xy3() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        registers[x] ^= registers[y];
-    }
-
-    /**
-     * ADD Vx, Vy
-     * Set Vx = Vx + Vy, Set VF = carry
-     * The values of Vx and Vy are added together.
-     * If the result is greater than 8 bits (i.e., > 255,) VF is set to 1,
-     * (VF --> registers[15])
-     * otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
-     */
-    private void opcode8xy4() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        int sum = registers[x] + registers[y];
-        if (sum > 255) {
-            registers[0xF] = 1;
-        } else {
-            registers[0xF] = 0;
-        }
-        registers[x] = (byte)sum;
-    }
-
-    /**
-     * SUB Vx, Vy
-     * Set Vx = Vx - Vy, set VF = NOT borrow.
-     * If Vx > Vy, then VF is set to 1, otherwise 0.
-     * Then Vy is subtracted from Vx, and the results stored in Vx.
-     */
-    private void opcode8xy5() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y = (byte)((opcode & 0x00F0) >> 4);
-        registers[0xF] = (byte)(registers[x] > registers[y] ? 1 : 0);
-        registers[x] -= registers[y];
-    }
-
-    /**
-     * SHR Vx {, Vy}
-     * Set Vx = Vx SHR 1
-     * If the least-significant bit of Vx is 1, then VF is set to 1,
-     * otherwise 0. Then Vx is divided by 2.
-     * In this case, least-significant bit is rightmost bit.
-     * TODO: look over this, it might not be good
-     */
-    private void opcode8xy6() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        registers[0xF] = (byte)(registers[x] & 0x1);
-        registers[x] >>= 1;
-    }
-
-    /**
-     * SUBN Vx, Vy
-     * Set Vx = Vy - Vx, set VF = NOT borrow
-     * If Vy > Vx, VF Set to 1, else 0.
-     * Then Vx subtracted from Vy, results stored in Vx.
-     */
-    private void opcode8xy7() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte y =  (byte)((opcode & 0x00F0) >> 4);
-        registers[0xF] = (byte)(registers[y] > registers[x] ? 1 : 0);
-        registers[x] = (byte)(registers[y] - registers[x]);
-    }
-
-    /**
-     * SHL Vx {, Vy}
-     * Vx = Vx SHL 1
-     * If most significant bit of Vx is 1, then VF is set to 1, else 0
-     * Then Vx multiplied by 2.
-     * TODO: look over this
-     */
-    private void opcode8xy7() {
-        byte x = (byte)((opcode & 0x0F00) >> 8);
-        byte mostSignificantBit = (byte)(registers[x] >> 7);
-        registers[0xF] = (byte)(mostSignificantBit);
-        registers[x] <<= 1; // multiply Vx by 2
-    }
-
-    /**
-     * SNE Vx, Vy
-     * Skip next instruction if Vx != Vy
-     */
-    private void opcode9xy0() {
-        byte x = (byte)((programCounter & 0x0F00) >> 8);
-        byte y = (byte)((programCounter & 0x00F0) >> 4);
-        if (registers[x] != registers[x]) {
-            programCounter += 2;
-        }
-    }
-
-    /**
-     * LD I, addr
-     * Value of register I is set to nnn.
-     */
-    private void opcodeAnnn() {
-        char value = (char)(programCounter & 0x0FFF);
-        indexRegister = value;
-    }
-
 }
