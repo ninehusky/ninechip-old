@@ -1,3 +1,8 @@
+/**
+ * Represents Chip-8's RAM.
+ * @author Andrew Cheung
+ */
+
 import java.io.*;
 
 public class Memory {
