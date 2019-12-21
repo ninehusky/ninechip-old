@@ -69,9 +69,10 @@ public class Memory {
         if (gameLength == -1) {
             throw new IllegalStateException("ROM File not yet loaded!");
         } else if (address < START_ADDRESS || address > END_ADDRESS) {
-            throw new IllegalArgumentException("Given address out of bounds!");
+            throw new IllegalArgumentException(String.format("Given address %04x out of bounds!", 
+                                                              (int)address));
         }
-        return (char)((memory[address] << 8) | memory[address + 1]);
+        return (char)(((memory[address] & 0xFF) << 8) | (memory[address + 1] & 0xFF));
     }
 
     /**
