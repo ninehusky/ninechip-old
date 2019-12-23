@@ -12,8 +12,6 @@ public class Chip8 {
 
     private DisplayFrame display;
 
-    private Keypad keypad;
-
     private Map<Character, OpcodeFunction> opcodeFuncs;
 
     private byte[] registers;
@@ -29,13 +27,12 @@ public class Chip8 {
     private char[][] graphics;
     private boolean needsDrawing;
 
-    public Chip8() {
+    public Chip8(String ROM) {
         memory = new Memory();
-        memory.loadROM("pong.rom");
+        memory.loadROM(ROM);
         memory.printMemory();
 
-        keypad = new Keypad();
-        display = new DisplayFrame(keypad);
+        display = new DisplayFrame();
 
         opcodeFuncs = new HashMap<Character, OpcodeFunction>();
         initializeOpcodes();
@@ -389,7 +386,6 @@ public class Chip8 {
     }
 
     /**
-     * TODO: TEST ALL OPCODES BELOW
      * 8xy6 - SHR Vx {, Vy}
      * Set Vx = Vx SHR 1
      * If least significant bit of Vx is 1, VF = 1, otherwise 0.
@@ -398,10 +394,14 @@ public class Chip8 {
     private class BitShiftRight implements OpcodeFunction {
         public void exec() {
             byte x = (byte)((opcode & 0x0F00) >>> 8);
+            // System.out.println(String.format("%04x is registers[x]", registers[x]));
             registers[0xF] = (byte)(registers[x] & 0x1);
-            registers[x] >>>= 1;
+            // System.out.println(String.format("%04x is registers[0xF]", registers[0xF]));
+            registers[x] = (byte)((registers[x] & 0xFF) >>> 1);
+            // System.out.println("Dividing!");
+            // System.out.println(String.format("%04x is registers[x] post division", registers[x]));
             programCounter += 2;
-        }
+        }   
     }
 
     /**
@@ -548,7 +548,7 @@ public class Chip8 {
     private class SkipIfPressed implements OpcodeFunction {
         public void exec() {
             byte x = (byte)((opcode & 0x0F00) >>> 8);
-            if (keypad.getPressed()[x]) {
+            if (display.getPressed()[x]) {
                 programCounter += 2;
             }
             programCounter += 2;
@@ -564,7 +564,7 @@ public class Chip8 {
     private class SkipIfNotPressed implements OpcodeFunction {
         public void exec() {
             byte x = (byte)((opcode & 0x0F00) >>> 8);
-            if (!keypad.getPressed()[x]) {
+            if (!display.getPressed()[x]) {
                 programCounter += 2;
             }
             programCounter += 2;
@@ -591,7 +591,7 @@ public class Chip8 {
      */
     private class WaitForKeyPress implements OpcodeFunction {
         public void exec() {
-            boolean[] pressed = keypad.getPressed();
+            boolean[] pressed = display.getPressed();
             int x = (opcode & 0x0F00) >> 8;
             for (int i = 0; i < pressed.length; i++) {
                 if (pressed[i]) {
@@ -638,7 +638,7 @@ public class Chip8 {
     private class AddIAndVx implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            indexRegister += registers[x];
+            indexRegister = (char)((indexRegister + registers[x]) & 0xFFFF);
             programCounter += 2;
         }
     }
@@ -667,11 +667,18 @@ public class Chip8 {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
             int num = registers[x];
-            memory.write(indexRegister, (byte)(num % 10));
+            System.out.println(num);
+            int ones = num % 10;
             num /= 10;
-            memory.write((char)(indexRegister + 1), (byte)(num % 10));
+            int tens = num % 10;
             num /= 10;
-            memory.write((char)(indexRegister + 2), (byte)(num % 10));
+            int hundreds = num % 10;
+            System.out.println("hundreds: " + (hundreds & 0xF));
+            System.out.println("tens: " + (tens & 0xF));
+            System.out.println("ones: " + (ones & 0xF));
+            memory.write(indexRegister, (byte)(hundreds & 0xF));
+            memory.write((char)(indexRegister + 1), (byte)(tens & 0xF));
+            memory.write((char)(indexRegister + 2), (byte)(ones & 0xF));
             programCounter += 2;
         }
     }
@@ -702,7 +709,10 @@ public class Chip8 {
             int x = (opcode & 0x0F00) >> 8;
             for (int i = 0; i <= x; i++) {
                 registers[i] = memory.read((char)(indexRegister + i));
+                System.out.println("Putting " + registers[i] + " into registers[" + i + "]");
             }
+            // i have no idea why he's doing this
+            indexRegister = (char)(indexRegister + x + 1);
             programCounter += 2;
         }
     }
