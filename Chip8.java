@@ -59,10 +59,10 @@ public class Chip8 {
             display.repaint();
             needsDrawing = false;
         }
-        if (delayRegister > 0) {
+        if (Byte.toUnsignedInt(delayRegister) > 0) {
             delayRegister--;
         }
-        if (soundRegister > 0) {
+        if (Byte.toUnsignedInt(soundRegister) > 0) {
             soundRegister--;
         }
     }
@@ -71,9 +71,9 @@ public class Chip8 {
      * Performs the task corresponding to the current opcode.
      */
     public void execOpcode() {
-        System.out.println(String.format("Current opcode: %04x", (int)(opcode)));
+        // System.out.println(String.format("Current opcode: %04x", (int)(opcode)));
         char opcodeSkeleton = trimOpcode();
-        System.out.println(String.format("Current skeleton: %04x", (int)(opcodeSkeleton)));
+        // System.out.println(String.format("Current skeleton: %04x", (int)(opcodeSkeleton)));
         opcodeFuncs.get(opcodeSkeleton).exec();
     }
 
@@ -125,8 +125,8 @@ public class Chip8 {
         if ((opcode & 0xF000) == 0x0000) {
             return opcode;
         } else if ((opcode & 0xF000) == 0x8000) {
-            return (char)((opcode & 0xFFFF) & 0xF00F);
-        } else if ((opcode & 0xF000) == 0xF000) {
+            return (char)((opcode & 0xF00F));
+        } else if ((opcode & 0xF000) == 0xF000 || (opcode & 0xF000) == 0xE000) {
             return (char)(opcode & 0xF0FF);
         }
         return (char)(opcode & 0xF000);
@@ -168,7 +168,7 @@ public class Chip8 {
     private class ReturnFromSubroutine implements OpcodeFunction {
         public void exec() {
             // System.out.println(String.format("Returning to address %04x", (int)stack[stackPointer]));
-            programCounter = stack[stackPointer];
+            programCounter = (char)(stack[stackPointer] + 2);
             stackPointer--;
         }
     }
@@ -184,7 +184,6 @@ public class Chip8 {
             char nnn = (char)(opcode & 0x0FFF);
             // System.out.println(String.format("Jumping to %04x", (int)nnn));
             programCounter = nnn;
-            programCounter += 2;
         }
     }
 
@@ -433,13 +432,13 @@ public class Chip8 {
     private class BitShiftLeft implements OpcodeFunction {
         public void exec() {
             int x = (byte)((opcode & 0x0F00) >> 8);
-            System.out.println(String.format("registers[x] is %02x", (registers[x])));
+            // System.out.println(String.format("registers[x] is %02x", (registers[x])));
             registers[0xF] = (byte)((registers[x] >> 7) & 0x01);
-            System.out.println("MOST SIGNIFICANT BIT: " + String.format("%04x", registers[0xF]));
-            System.out.println(String.format("%02x is old registers[x]", registers[x]));
+            // System.out.println("MOST SIGNIFICANT BIT: " + String.format("%04x", registers[0xF]));
+            // System.out.println(String.format("%02x is old registers[x]", registers[x]));
             registers[x] = (byte)(registers[x] << 1);
-            System.out.println(String.format("%02x is registers[F]", registers[0xF]));
-            System.out.println(String.format("%02x is registers[x]", registers[x]));
+            // System.out.println(String.format("%02x is registers[F]", registers[0xF]));
+            // System.out.println(String.format("%02x is registers[x]", registers[x]));
             // (byte)((registers[x] << 1) & 0xFF);
             // System.out.println(String.format("%04x", (byte)registers[x]));
             programCounter += 2;
@@ -522,7 +521,7 @@ public class Chip8 {
 
             registers[0xF] = 0;
             for (int row = 0; row < n; row++) {
-                System.out.println(String.format("indexRegister pointing to %04x", (int)indexRegister));
+                // System.out.println(String.format("indexRegister pointing to %04x", (int)indexRegister));
                 byte pixel = memory.read((char)(indexRegister + row));
                 for (int col = 0; col < 8; col++) {
                     int bit = pixel & (0b10000000 >>> col);
@@ -638,7 +637,10 @@ public class Chip8 {
     private class AddIAndVx implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            indexRegister = (char)((indexRegister + registers[x]) & 0xFFFF);
+            // System.out.println("I was " + (int)indexRegister);
+            // System.out.println("registers[x] was " + Byte.toUnsignedInt(registers[x]));
+            // System.out.println("Sum is " + ((indexRegister + Byte.toUnsignedInt(registers[x])) & 0xFFFF));
+            indexRegister = (char)((indexRegister + Byte.toUnsignedInt(registers[x])) & 0xFFFF);
             programCounter += 2;
         }
     }
@@ -651,7 +653,8 @@ public class Chip8 {
     private class SetIToLocationOfSprite implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            indexRegister = (char)(Memory.FONT_START_ADDRESS + (5 * registers[x]));
+            int character = registers[x];
+            indexRegister = (char)(Memory.FONT_START_ADDRESS + (5 * character));
             programCounter += 2;
         }
     }
@@ -665,20 +668,15 @@ public class Chip8 {
      */
     private class StoreBCDRepresentationOfVx implements OpcodeFunction {
         public void exec() {
-            int x = (opcode & 0x0F00) >> 8;
-            int num = registers[x];
-            System.out.println(num);
-            int ones = num % 10;
-            num /= 10;
-            int tens = num % 10;
-            num /= 10;
-            int hundreds = num % 10;
-            System.out.println("hundreds: " + (hundreds & 0xF));
-            System.out.println("tens: " + (tens & 0xF));
-            System.out.println("ones: " + (ones & 0xF));
-            memory.write(indexRegister, (byte)(hundreds & 0xF));
-            memory.write((char)(indexRegister + 1), (byte)(tens & 0xF));
-            memory.write((char)(indexRegister + 2), (byte)(ones & 0xF));
+            int x = (opcode & 0xF00) >> 8;
+            int num = Byte.toUnsignedInt(registers[x]);
+            // System.out.println(String.format("%02x is num", (byte)num));
+            // System.out.println(String.format("%02x is hunds place", (byte)(((num / 100) % 10) & 0xF)));
+            // System.out.println(String.format("%02x is tens place", (byte)(((num / 10) % 10) & 0xF))); 
+            // System.out.println(String.format("%02x is ones place", ((byte)((num % 10) & 0xF))));                   
+            memory.write(indexRegister, (byte)(((num / 100) % 10) & 0xF));
+            memory.write((char)(indexRegister + 1), (byte)(((num / 10) % 10) & 0xF));
+            memory.write((char)(indexRegister + 2), ((byte)((num % 10) & 0xF)));
             programCounter += 2;
         }
     }
@@ -709,10 +707,8 @@ public class Chip8 {
             int x = (opcode & 0x0F00) >> 8;
             for (int i = 0; i <= x; i++) {
                 registers[i] = memory.read((char)(indexRegister + i));
-                System.out.println("Putting " + registers[i] + " into registers[" + i + "]");
+                // System.out.println("Putting " + registers[i] + " into registers[" + i + "]");
             }
-            // i have no idea why he's doing this
-            indexRegister = (char)(indexRegister + x + 1);
             programCounter += 2;
         }
     }
