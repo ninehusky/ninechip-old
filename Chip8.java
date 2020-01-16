@@ -16,8 +16,8 @@ public class Chip8 {
 
     private byte[] registers;
     private char indexRegister;
-    private byte delayRegister;
-    private byte soundRegister;
+    private int delayRegister;
+    private int soundRegister;
 
     private char programCounter;
 
@@ -27,12 +27,14 @@ public class Chip8 {
     private char[][] graphics;
     private boolean needsDrawing;
 
+    private boolean[] pressed;
+
     public Chip8(String ROM) {
         memory = new Memory();
         memory.loadROM(ROM);
         memory.printMemory();
 
-        display = new DisplayFrame();
+        display = new DisplayFrame(this);
 
         opcodeFuncs = new HashMap<Character, OpcodeFunction>();
         initializeOpcodes();
@@ -48,23 +50,36 @@ public class Chip8 {
         graphics = new char[64][32];
     }
 
+    public void setPressed(boolean[] pressed) {
+        this.pressed = pressed;
+    }
+
+    public void decrementTimers() {
+        if (delayRegister > 0) {
+            delayRegister--;
+        }
+        if (soundRegister > 0) {
+            soundRegister--;
+        }
+    }
+
     /**
      * Emulates one cycle of the CHIP-8.
      */
     public void cycle() {
+        pressed = display.getPressed();
+        for (boolean val : pressed) {
+            if (val) {
+                System.out.println("Stuff is being pressed.");
+            }
+        }
         opcode = memory.getOpcode(programCounter);
         execOpcode();
         if (needsDrawing) {
             display.updateGraphics(graphics);
             display.repaint();
             needsDrawing = false;
-        }
-        if (Byte.toUnsignedInt(delayRegister) > 0) {
-            delayRegister--;
-        }
-        if (Byte.toUnsignedInt(soundRegister) > 0) {
-            soundRegister--;
-        }
+        }        
     }
 
     /**
@@ -547,7 +562,7 @@ public class Chip8 {
     private class SkipIfPressed implements OpcodeFunction {
         public void exec() {
             byte x = (byte)((opcode & 0x0F00) >>> 8);
-            if (display.getPressed()[x]) {
+            if (pressed[x]) {
                 programCounter += 2;
             }
             programCounter += 2;
@@ -563,7 +578,7 @@ public class Chip8 {
     private class SkipIfNotPressed implements OpcodeFunction {
         public void exec() {
             byte x = (byte)((opcode & 0x0F00) >>> 8);
-            if (!display.getPressed()[x]) {
+            if (!pressed[x]) {
                 programCounter += 2;
             }
             programCounter += 2;
@@ -578,7 +593,7 @@ public class Chip8 {
     private class SetVxToDelayTimer implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            registers[x] = delayRegister;
+            registers[x] = (byte)(delayRegister & 0xFF);
             programCounter += 2;
         }
     }
@@ -590,7 +605,6 @@ public class Chip8 {
      */
     private class WaitForKeyPress implements OpcodeFunction {
         public void exec() {
-            boolean[] pressed = display.getPressed();
             int x = (opcode & 0x0F00) >> 8;
             for (int i = 0; i < pressed.length; i++) {
                 if (pressed[i]) {
@@ -610,7 +624,7 @@ public class Chip8 {
     private class SetDelayTimerToVx implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            delayRegister = registers[x];
+            delayRegister = Byte.toUnsignedInt(registers[x]);
             programCounter += 2;
         }
     }
@@ -623,7 +637,7 @@ public class Chip8 {
     private class SetSoundTimerToVx implements OpcodeFunction {
         public void exec() {
             int x = (opcode & 0x0F00) >> 8;
-            soundRegister = registers[x];
+            soundRegister = Byte.toUnsignedInt(registers[x]);
             programCounter += 2;
         }
     }
@@ -712,5 +726,4 @@ public class Chip8 {
             programCounter += 2;
         }
     }
-
 }

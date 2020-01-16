@@ -6,10 +6,11 @@ public class Main extends Thread {
     }
 
     public void run() {
-        while (true) {
+        while (true) {    
             chip8.cycle();
+            chip8.decrementTimers();
             try {
-                Thread.sleep(16);
+                Thread.sleep(10);
             } catch (InterruptedException e) {
 
             }

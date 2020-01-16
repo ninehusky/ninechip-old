@@ -11,11 +11,13 @@ public class DisplayFrame extends JFrame implements KeyListener {
 
     private DisplayPanel displayPanel;
     private boolean[] pressed;
+    private Chip8 c8;
 
-    public DisplayFrame() {
+    public DisplayFrame(Chip8 c8) {
+        this.c8 = c8;
         pressed = new boolean[NUM_OF_KEYS];
 
-        setSize(WIDTH * PIXEL_SIZE, HEIGHT * PIXEL_SIZE);
+        setSize(WIDTH * PIXEL_SIZE, HEIGHT * PIXEL_SIZE + 20);
         setTitle("ninechip!");
         displayPanel = new DisplayPanel();
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -63,6 +65,7 @@ public class DisplayFrame extends JFrame implements KeyListener {
         } else if (e.getKeyCode() == KeyEvent.VK_V) {
             pressed[0xF] = true;
         }
+        c8.setPressed(pressed);
     }
 
     @Override
@@ -104,6 +107,7 @@ public class DisplayFrame extends JFrame implements KeyListener {
         } else if (e.getKeyCode() == KeyEvent.VK_V) {
             pressed[0xF] = false;
         }
+        c8.setPressed(pressed);
     }
 
     public boolean[] getPressed() {

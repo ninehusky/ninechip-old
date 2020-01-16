@@ -85,7 +85,6 @@ public class Memory {
      * @throws IllegalStateException if ROM File not yet loaded
      * @throws IllegalArgumentException if address is out of bounds
      *                                  (addr < START_ADDRESS || addr > END_ADDRESS)
-     * TODO: investigate that weird stupid Java conversion stuff
      */
     public char getOpcode(char address) {
         if (gameLength == -1) {
